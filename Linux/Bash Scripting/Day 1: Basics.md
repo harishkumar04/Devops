@@ -11,6 +11,14 @@ almost always writing Bash.
 ```
 ---
 
+# Command substitution
+
+```shell
+$() # Command substitution — modern, nestable
+$(date)
+```
+---
+
 # The Shebang #!/bin/bash
 
 The very first line of every Bash script must be:
