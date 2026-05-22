@@ -1,4 +1,4 @@
-# 1. if/else Syntax
+# 1. if / else Syntax
 
 ```shell
    if [[ condition ]]; then
@@ -69,9 +69,48 @@ These are used constantly — checking config files exist before reading them, c
 
 ---
 
-# Practice Script 2: Login Simulation
+# Practice Script 1: File valiadator
+
+file_validator.sh — Validate a file's existence and permissions
+Usage: ./file_validator.sh <filepath>
 
 ```shell
+   #!/usr/bin/env bash
+
+   if [[ $# -eq 0 ]]; then
+       echo "Usage: $0 <filepath>" >&2
+       exit 1
+   fi
+
+   file="$1"
+
+   if [[ ! -e "$file" ]]; then
+       echo "ERROR: '$file' does not exist" >&2
+       exit 1
+   fi
+
+   if [[ -f "$file" ]]; then
+       echo "Type      : regular file"
+   elif [[ -d "$file" ]]; then
+       echo "Type      : directory"
+   fi
+
+   [[ -r "$file" ]] && echo "Readable  : yes" || echo "Readable  : no"
+
+   # && runs the right side only if left side succeeded (exit 0)
+   # || runs the right side only if left side failed (non-zero)
+
+   [[ -w "$file" ]] && echo "Writable  : yes" || echo "Writable  : no"
+   [[ -x "$file" ]] && echo "Executable: yes" || echo "Executable: no"
+```
+
+# Practice Script 2: Login Simulation
+
+login_sim.sh — Simulate a login with username/password validation
+
+```shell
+#!/usr/bin/env bash
+
 VALID_USER="admin"
 VALID_PASS="PASSWORD123"
 MAX_ATTEMPTS=3
@@ -99,3 +138,28 @@ echo "Too many failed attempts.. Acess Denied!" >&2
 exit 1
 ```
 
+--- 
+
+# Production Pattern
+
+```shell
+if grep -q "error" app.log; then
+       echo "errors found"
+fi
+```
+
+-q (quiet mode), grep does only one thing:
+   1. Searches for the pattern
+   2. Prints nothing — but still sets the exit code
+
+The exit code is what matters
+
+```python
+   found a match    →  exit code 0  (success)
+   found no match   →  exit code 1  (failure)
+```
+
+`if` in Bash works purely on exit codes:
+
+   - exit code 0 → condition is true → runs the then block
+   - non-zero → condition is false → skips it
