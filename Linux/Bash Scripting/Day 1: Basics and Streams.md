@@ -57,6 +57,73 @@ Every process has 3 standard streams:
 echo "this goes to stdout"
 echo "this is an error" >&2    # redirect to stderr
 ```
+In the above command `>&2` meanst redirect the stdout to whereever the stderr is pointing. This is done because by default echo gives `stdout` and both the `stdout and stderr are printed on the terminal` which makes it difficult to identify which is error and output.
+
+The moment you write an error message, you should automatically type >&2. Not because you need it right now — because the script will eventually be used in a context where it matters, and retrofitting it later is how bugs happen.
+
+## Example 1
+
+```shell
+./demo.sh > output.log 2> error.log
+```
+
+- > redirects stdout to output.log
+- 2> redirects stderr to error.log
+- Terminal shows nothing — both are captured to
+   files
+
+We can view them by
+
+```shell
+   cat output.log    # only normal output
+   cat error.log     # only error messages
+```
+
+## Example 2
+
+```shell
+./script.sh > output.log 2>&1
+
+```
+Reading left to right:
+
+1. > output.log — point stdout (fd 1) to output.log
+2. 2>&1 — point stderr (fd 2) to wherever fd 1 is pointing — which is now output.log
+
+Result: both stdout and stderr go to output.log.
+
+## Order matters:
+
+```shell
+./script.sh 2>&1 > output.log    # WRONG — stderr still goes to terminal
+
+./script.sh > output.log 2>&1    # CORRECT — both go to file
+```
+
+## Common patterns
+
+```shell
+# only capture stdout, errors still show on terminal
+./demo.sh > output.log
+# or
+./demo.sh 1> output.log # both are same
+
+# only capture stderr, normal output still shows on terminal
+./demo.sh 2> error.log
+
+# capture both to the same file
+./demo.sh > all.log 2>&1
+
+# capture both to separate files
+./demo.sh > output.log 2> error.log
+
+# discard errors completely, only see stdout
+./demo.sh 2> /dev/null
+
+# /dev/null is a black hole — anything redirected there is gone
+```
+
+---
 
 # bash -x (trace mode)
 
