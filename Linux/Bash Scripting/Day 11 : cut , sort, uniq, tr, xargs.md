@@ -78,12 +78,12 @@ sort -u file.txt                 # sort + remove duplicates
 
 # uniq 
 
-remove/count adjacent duplicates (always sort first!)
+uniq only collapses adjacent identical lines — that's why sort comes first.
 
 ```shell
-   sort file.txt | uniq             # remove duplicates
-   sort file.txt | uniq -c          # count occurrences
-   sort file.txt | uniq -d          # show only duplicates
+   sort file.txt | uniq             # remove duplicates (same as sort -u)
+   sort file.txt | uniq -c          # count occurrences of each item
+   sort file.txt | uniq -d          # show only duplicates 
    sort file.txt | uniq -u          # show only unique lines
    sort file.txt | uniq -c | sort -rn   # frequency ranking (most common first)
 ```
@@ -111,6 +111,45 @@ Key flags: -d (delete), -s (squeeze repeated chars)
 
 turn stdin into arguments
 
+The problem xargs solves:
+
+```shell
+   # This FAILS — rm doesn't read from stdin
+   cat ip_list.txt | rm
+
+   # This works — xargs converts stdin lines into
+   arguments
+   echo "file1.txt file2.txt" | xargs rm
+
+   # Create 3 test files, then delete them with xargs
+   touch /tmp/test1.log /tmp/test2.log /tmp/test3.log
+   ls /tmp/test*.log | xargs rm
+   ls /tmp/test*.log    # gone
+
+   # -I{} — placeholder, lets you control where the
+   argument goes
+   cat users.txt | cut -d: -f1 | xargs -I{} echo "Found
+   user: {}"
+
+   Found user: root
+   Found user: daemon
+   Found user: harish
+   Found user: deploy
+   Found user: mysql
+
+   # -n2 — pass 2 args at a time
+   echo "a b c d" | xargs -n2 echo
+
+   a b
+   c d
+
+   # Safe version for filenames with spaces (-print0 /
+   -0)
+   find /tmp -name "*.log" -print0 | xargs -0 rm
+```
+
+## Examples
+
 ```shell
 # without xargs — this FAILS:
 find . -name "*.log" | rm          # rm doesn't read from stdin
@@ -130,3 +169,105 @@ find . -name "*.log" -print0 | xargs -0 rm
 Always use -print0 | xargs -0 when filenames might have spaces.
 
 ---
+
+# Practice Script 1:  Duplicate IP Detector
+
+```shell
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILE="${1:?Usage: $0 <ip_file>}"
+
+echo "=== IPs appearing more than once ==="
+sort "$FILE" | uniq -d
+
+echo ""
+echo "=== Full frequency report ==="
+sort "$FILE" | uniq -c | sort -rn | awk '{printf "
+%dx  %s\n", $1, $2}'
+```
+
+```shell
+bash ip_duplicates.sh ip_list.txt
+```
+
+```shell
+# output
+=== IPs appearing more than once ===
+10.0.0.5
+172.16.0.1
+192.168.1.10
+203.0.113.7
+
+=== Full frequency report ===
+ 3x  192.168.1.10
+ 3x  10.0.0.5
+ 2x  203.0.113.7
+ 2x  172.16.0.1
+```
+---
+
+# Practice Script 2 — Username Extractor
+
+```shell
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILE="${1:-/etc/passwd}"
+
+echo "=== All usernames ==="
+cut -d: -f1 "$FILE" | sort
+
+echo ""
+echo "=== Human users (UID >= 1000) ==="
+awk -F: '$3 >= 1000 { print $1 }' "$FILE" | sort
+
+echo ""
+echo "=== Usernames uppercased ==="
+cut -d: -f1 "$FILE" | tr 'a-z' 'A-Z' | sort
+```
+
+```shell
+bash username_extractor.sh users.txt
+```
+
+```shell
+#Output
+
+=== All usernames ===
+daemon
+deploy
+harish
+mysql
+root
+
+=== Human users (UID >= 1000) ===
+deploy
+harish
+
+=== Usernames uppercased ===
+DAEMON
+DEPLOY
+HARISH
+MYSQL
+ROOT
+```
+---
+
+# Example that ties it all together
+
+```shell
+# "Give me the top 3 most frequent IPs from the log"
+sort ip_list.txt | uniq -c | sort -rn | head -3 |
+awk '{print $2}'
+
+192.168.1.10
+10.0.0.5
+203.0.113.7
+
+# "Extract all usernames, clean to uppercase, one per line"
+cut -d: -f1 users.txt | tr 'a-z' 'A-Z' | sort | uniq
+
+# "Delete log files older than 7 days"
+find /var/log -name "*.log" -mtime +7 | xargs rm
+```
