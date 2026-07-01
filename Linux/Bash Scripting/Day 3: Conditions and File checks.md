@@ -129,8 +129,8 @@ while [[ $attempts -lt $MAX_ATTEMPTS ]]; do
   attempts=$((attempts + 1))
   remaining_attempts=$((MAX_ATTEMPTS - attempts))
 
-  if [[ $remaining -gt 0 ]]; then
-    echo "Invalid Credentials! $remaining attempt(s) remaining."
+  if [[ $remaining_attempts -gt 0 ]]; then
+    echo "Invalid Credentials! $remaining_attempts attempt(s) remaining."
   fi
 done
 
