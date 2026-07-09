@@ -172,6 +172,39 @@ main() {
 
 main
 ```
+
+## Explanation
+
+df -> Disk Filesystem (It shows how much space is used and available on mounted filesystems.)
+-h -> Human readable format
+/ -> Root filesystem
+awk -> Powerful text processing tool. It reads input line by line and splits each line into fields (columns).
+
+For example, given:
+
+```shell
+Filesystem      Size Used Avail Use% Mounted on
+/dev/sda1        40G  27G   11G  72% /
+```
+
+The second line is split like this:
+
+```python
+Field	Value
+$1	/dev/sda1
+$2	40G
+$3	27G
+$4	11G
+$5	72%
+$6	/
+```
+
+NR -> Number of Record (the current line number)
+tr -> translate (or transform)
+-d -> delete characters
+
+tr -d '%' -> Delete every % character.
+
 ---
 
 # Practice script 2: Production Logger Utility
