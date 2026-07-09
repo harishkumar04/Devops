@@ -175,10 +175,10 @@ main
 
 ## Explanation
 
-df -> Disk Filesystem (It shows how much space is used and available on mounted filesystems.)
--h -> Human readable format
-/ -> Root filesystem
-awk -> Powerful text processing tool. It reads input line by line and splits each line into fields (columns).
+- `df` -> Disk Filesystem (It shows how much space is used and available on mounted filesystems.)
+- `-h` -> Human readable format
+- `/` -> Root filesystem
+- `awk` -> Powerful text processing tool. It reads input line by line and splits each line into fields (columns).
 
 For example, given:
 
@@ -199,11 +199,11 @@ $5	72%
 $6	/
 ```
 
-NR -> Number of Record (the current line number)
-tr -> translate (or transform)
--d -> delete characters
+- `NR` -> Number of Record (the current line number)
+- `tr` -> translate (or transform)
+- `-d` -> delete characters
 
-tr -d '%' -> Delete every % character.
+`tr -d '%'` -> Delete every % character.
 
 ---
 
