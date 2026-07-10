@@ -77,6 +77,31 @@ Output:
 ```
 ---
 
+# Literal String
+
+`-F` (Fixed String)
+
+Normally, grep treats the search pattern as a regular expression.
+
+The `-F` option tells grep to treat the pattern as a literal string.
+
+For example, without -F:
+
+```bash
+grep "1.2.3.4" file
+```
+
+`.` is a regex metacharacter meaning "any character."
+
+With -F:
+
+```bash
+grep -F "1.2.3.4" file
+```
+`.` is treated as a `normal dot`, which is what you want when searching for IP addresses.
+
+---
+
 # Count Matches
 
 Instead of printing:
@@ -606,6 +631,7 @@ This is exactly the type of command used during security investigations.
 
 ---
 
+
 # Production grep Knowledge Checklist
 
 ```bash
@@ -621,6 +647,7 @@ grep -q
 grep -A
 grep -B
 grep -C
+grep -F
 ```
 
 Regex:
