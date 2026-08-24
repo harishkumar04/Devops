@@ -644,6 +644,78 @@ Check if a given service is active or inactive. Takes a service name as an argum
 
 ```bash
 #!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+    echo "The number of arguments entered is 0 enter the correct ones" >&2
+    exit 1
+fi
+
+service="$1"
+
+if ! systemctl list-units --type=service | grep -q "^${SERVICE}\.service"; then
+   echo "[ERROR] The given service does not exist" >&2
+   exit 1
+fi
+
+status=$(systemctl is-active "$service")
+timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+case "$status" in
+   active)
+       echo "[$timestamp] $service is RUNNING (active)"
+       ;;
+   inactive)
+       echo "[$timestamp] $service is STOPPED (inactive)"
+       ;;
+   failed)
+       echo "[$timestamp] $service has FAILED"
+       ;;
+   *)
+       echo "[$timestamp] $service is in unknown state: $status"
+       ;;
+esac
+
+if [[ "$STATUS" == "active" ]]; then
+    exit 0
+else
+    exit 1
+fi
+```
+
+---
+
+# Script 2 : Service Restarter
+
+Takes a service name as an argument, checks if it's currently running, and if not — restarts it with full logging (timestamp, what it found, what it did, whether it succeeded). If it's already running, just confirm and exit cleanly.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+   echo "Usuage: $0 <service_name>" >&2
+   exit 1
+fi
+
+service="$1"
+timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+status="$(systemctl is-active "$service")"
+
+if ! systemctl is-active "$service"; then
+    echo "[$timestamp] $service is down — restarting" >&2
+    systemctl restart "$SERVICE"
+    echo "[$timestamp] $service restarted successfully"
+else
+    echo "[$timestamp] $service is running"
+    exit 0
+fi
+
+if [[ "$status" == "active" ]]; then
+    exit 0
+else
+    exit 1
+fi
 ```
 
 # Key Production Rules
