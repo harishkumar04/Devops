@@ -690,32 +690,40 @@ fi
 Takes a service name as an argument, checks if it's currently running, and if not — restarts it with full logging (timestamp, what it found, what it did, whether it succeeded). If it's already running, just confirm and exit cleanly.
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+  #!/usr/bin/env bash
+  set -euo pipefail
 
-if [[ $# -eq 0 ]]; then
-   echo "Usuage: $0 <service_name>" >&2
-   exit 1
-fi
+  # Validate argument
+  if [[ $# -eq 0 ]]; then
+      echo "Usage: $0 <service-name>" >&2
+      exit 1
+  fi
 
-service="$1"
-timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-status="$(systemctl is-active "$service")"
+  service="$1"
 
-if ! systemctl is-active "$service"; then
-    echo "[$timestamp] $service is down — restarting" >&2
-    systemctl restart "$SERVICE"
-    echo "[$timestamp] $service restarted successfully"
-else
-    echo "[$timestamp] $service is running"
-    exit 0
-fi
+  if ! systemctl list-unit-files --type=service | grep -q "^${service}\.service"; then
+      echo "[ERROR] Service '${service}' not found on this system" >&2
+      exit 1
+  fi
 
-if [[ "$status" == "active" ]]; then
-    exit 0
-else
-    exit 1
-fi
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+  if ! systemctl is-active --quiet "$service"; then
+      echo "[$timestamp] $service is down — restarting" >&2
+      systemctl restart "$service"
+
+      # Verify it actually came back up
+      if systemctl is-active --quiet "$service"; then
+          echo "[$timestamp] $service restarted successfully"
+          exit 0
+      else
+          echo "[$timestamp] ERROR: $service failed to restart" >&2
+          exit 1
+      fi
+  else
+      echo "[$timestamp] $service is already running"
+      exit 0
+  fi
 ```
 
 # Key Production Rules
