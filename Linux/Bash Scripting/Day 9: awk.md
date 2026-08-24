@@ -33,10 +33,10 @@ echo "harish 25 bangalore" | awk '{print $0}'    # harish 25 bangalore
 
 # Built-in variables
 
-NR    # current line number (Number of Records)
-NF    # number of fields in current line
-FS    # field separator (default: whitespace)
-OFS   # output field separator
+- NR    # current line number (Number of Records)
+- NF    # number of fields in current line
+- FS    # field separator (default: whitespace)
+- OFS   # output field separator
 
 ```shell
 awk '{ print NR, $1 }' /etc/passwd       # line number + first field
