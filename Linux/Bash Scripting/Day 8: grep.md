@@ -65,8 +65,7 @@ grep -i "error" app.log # this will match all the things like "Error, ERROR, err
 # Line Numbers
 
 ```bash
-grep -n "ERROR" app.log # Very useful when debugging.
-
+grep -n "ERROR" app.log
 ```
 
 Output:
@@ -635,19 +634,19 @@ This is exactly the type of command used during security investigations.
 # Production grep Knowledge Checklist
 
 ```bash
-grep -i
-grep -n
-grep -c
-grep -v
-grep -w
-grep -r
-grep -rl
-grep -E
-grep -q
-grep -A
-grep -B
-grep -C
-grep -F
+grep -i # case insensitive search
+grep -n # prints the line number
+grep -c # returns the number of words that matches the pattern
+grep -v # inverse matching (prints everything except the pattern specified)
+grep -w # exact word match
+grep -r # search directories
+grep -rl # show only files names
+grep -E # regex pattern
+grep -q # doesn't give the exit codes
+grep -A 2 # gives the 2 lines after the pattern
+grep -B 2 # # gives the 2 lines before the pattern
+grep -C 2 # gives the 2 lines above the specified word and after that
+grep -F # treats 1.2.3.4 as it is
 ```
 
 Regex:
