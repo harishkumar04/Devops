@@ -15,8 +15,7 @@
 
   # Capture failed services into an array
   mapfile -t failed_services < <(
-      systemctl list-units --state=failed --type=service --no-legend --plain \
-      | awk '{print $1}'
+      systemctl list-units --state=failed --type=service --no-legend --plain | awk '{print $1}'
   )
 
   # Check if any failed services found
@@ -36,8 +35,35 @@
       echo ""
   done
 
-  exit 1  # Non-zero exit so callers (cron, CI) know failures exist
+  exit 1 
 ```
+
+## mapfile
+mapfile is a Bash builtin that reads lines from standard input and puts them into an array.
+
+For example, if the input is:
+
+```shell
+nginx.service
+ssh.service
+docker.service
+```
+
+then after:
+```bash
+mapfile -t failed_services
+
+# the array is effectively:
+
+failed_services[0]="nginx.service"
+failed_services[1]="ssh.service"
+failed_services[2]="docker.service"
+```
+
+The -t option is important ---> `It removes the trailing newline from each line.`
+
+So you get: `"nginx.service"` instead of something containing a newline.\
+
 ---
 
 # Script 2 — auto_recovery.sh
