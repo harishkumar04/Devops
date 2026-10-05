@@ -37,6 +37,24 @@
 
   exit 1 
 ```
+## Example output for systemctl command
+
+```python
+  UNIT           LOAD   ACTIVE SUB    DESCRIPTION
+● nginx.service  loaded failed failed Web Server
+  postgresql.service loaded failed failed DB Server
+
+2 loaded units listed.
+```
+That's fine for a human to read. But a script just wants the two names: nginx.service and postgresql.service. Everything else — the header row, the ● dot, the footer line "2 loaded units listed." — is just noise that would confuse a script trying to pull out names.
+
+So we add two flags to strip that noise:
+
+```python
+systemctl list-units --state=failed --type=service --no-legend --plain
+```
+- --no-legend → removes the header row and the footer line ("2 loaded units listed.")
+- --plain → removes the ● dot symbol
 
 ## mapfile
 mapfile is a Bash builtin that reads lines from standard input and puts them into an array.
