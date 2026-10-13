@@ -1,181 +1,106 @@
 # Script 1 — failed_service_detector.sh
 
-``` bash
-  #!/usr/bin/env bash
-  set -euo pipefail
-
-  # ─────────────────────────────────────────────
-  # failed_service_detector.sh
-  # Lists all systemd services currently in failed state
-  # ─────────────────────────────────────────────
-
-  TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-
-  echo "[$TIMESTAMP] Scanning for failed services..."
-
-  # Capture failed services into an array
-  mapfile -t failed_services < <(
-      systemctl list-units --state=failed --type=service --no-legend --plain | awk '{print $1}'
-  )
-
-  # Check if any failed services found
-  if [[ ${#failed_services[@]} -eq 0 ]]; then
-      echo " No failed services found. All good."
-      exit 0
-  fi
-
-  echo " Found ${#failed_services[@]} failed service(s):"
-  echo ""
-
-  for svc in "${failed_services[@]}"; do
-      echo "  → $svc"
-      # Print the last 3 journal lines for context
-      journalctl -u "$svc" -n 3 --no-pager 2>/dev/null \
-          | sed 's/^/     /'
-      echo ""
-  done
-
-  exit 1 
-```
-## Example output for systemctl command
-
-```python
-  UNIT           LOAD   ACTIVE SUB    DESCRIPTION
-● nginx.service  loaded failed failed Web Server
-  postgresql.service loaded failed failed DB Server
-
-2 loaded units listed.
-```
-That's fine for a human to read. But a script just wants the two names: nginx.service and postgresql.service. Everything else — the header row, the ● dot, the footer line "2 loaded units listed." — is just noise that would confuse a script trying to pull out names.
-
-So we add two flags to strip that noise:
-
-```python
-systemctl list-units --state=failed --type=service --no-legend --plain
-```
-- --no-legend → removes the header row and the footer line ("2 loaded units listed.")
-- --plain → removes the ● dot symbol
-
-## mapfile
-mapfile is a Bash builtin that reads lines from standard input and puts them into an array.
-
-For example, if the input is:
-
-```shell
-nginx.service
-ssh.service
-docker.service
-```
-
-then after:
 ```bash
-mapfile -t failed_services
+#!/usr/bin/env bash
+set -euo pipefail
 
-# the array is effectively:
+mapfile -t arr < <(systemctl list-units --state=failed --type=service --no-legend --plain | awk '{print $1}')
 
-failed_services[0]="nginx.service"
-failed_services[1]="ssh.service"
-failed_services[2]="docker.service"
+for svc in "${arr[@]}"; do
+    echo "Found failed service: $svc"
+done
 ```
-
-The -t option is important ---> `It removes the trailing newline from each line.`
-
-So you get: `"nginx.service"` instead of something containing a newline.\
-
----
 
 # Script 2 — auto_recovery.sh
 
 ```bash
-  #!/usr/bin/env bash
-  set -euo pipefail
+#!/usr/bin/env bash
+set -euo pipefail
 
-  # ─────────────────────────────────────────────
-  # auto_recovery.sh
-  # Detects failed systemd services and attempts
-  # auto-restart with full logging
-  # ─────────────────────────────────────────────
+MAX_RESTARTS=3
+NEVER_RESTART=("database.service" "payment-gateway.service")
 
-  LOG_FILE="/tmp/auto_recovery_$(date '+%Y%m%d').log"
-  MAX_RETRIES=3
+timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
 
-  log() {
-      local level="$1"
-      local msg="$2"
-      local ts
-      ts=$(date '+%Y-%m-%d %H:%M:%S')
-      echo "[$ts] [$level] $msg" | tee -a "$LOG_FILE"
-  }
+mapfile -t arr < <(systemctl list-units --state=failed --type=service --noint $1}')
 
-  restart_service() {
-      local svc="$1"
-      local attempt=0
+if [[ ${#arr[@]} -eq 0 ]]; then
+    echo "$(timestamp) No failed services found."
+    exit 0
+fi
 
-      while [[ $attempt -lt $MAX_RETRIES ]]; do
-          attempt=$(( attempt + 1 ))
-          log "INFO" "Attempting restart of $svc (attempt $attempt/$MAX_RETRIES)..."
+for svc in "${arr[@]}"; do
+    # 1. Never-restart list
+    if [[ " ${NEVER_RESTART[@]} " == *" $svc "* ]]; then
+        echo "$(timestamp) SKIP: $svc is on the never-auto-restart list. A
+        continue
+    fi
 
-          if systemctl restart "$svc" 2>>"$LOG_FILE"; then
-              sleep 2  # give it a moment to stabilize
+    # 2. Crash-loop cap
+    countfile="/var/tmp/${svc}.restart_count"
+    count=0
+    [[ -f "$countfile" ]] && count=$(cat "$countfile")
 
-              if systemctl is-active --quiet "$svc"; then
-                  log "INFO" "$svc recovered successfully on attempt $attempt"
-                  return 0
-              else
-                  log "WARN" "$svc restarted but is not active — may have crashed again"
-              fi
-          else
-              log "WARN" "systemctl restart failed for $svc on attempt $attempt"
-          fi
-      done
+    if [[ "$count" -ge "$MAX_RESTARTS" ]]; then
+        echo "$(timestamp) ALERT: $svc has failed $count times. Needs a hu
+        continue
+    fi
 
-      log "ERROR" " $svc could not be recovered after $MAX_RETRIES attempts"
-      return 1
-  }
+    # 3. Restart
+    echo "$(timestamp) Restarting $svc (attempt $((count + 1)))..."
+    systemctl restart "$svc"
 
-  log "INFO" "Starting auto-recovery scan..."
-
-  mapfile -t failed_services < <(
-      systemctl list-units --state=failed --type=service --no-legend --plain \
-      | awk '{print $1}'
-  )
-
-  if [[ ${#failed_services[@]} -eq 0 ]]; then
-      log "INFO" "No failed services found. Nothing to recover."
-      exit 0
-  fi
-
-  log "INFO" "Found ${#failed_services[@]} failed service(s): ${failed_services[*]}"
-
-  recovered=0
-  failed=0
-
-  for svc in "${failed_services[@]}"; do
-      if restart_service "$svc"; then
-          (( recovered++ )) || true
-      else
-          (( failed++ )) || true
-      fi
-  done
-
-  echo ""
-  log "INFO" "Recovery summary → Recovered: $recovered | Still failed: $failed"
-  log "INFO" "Full log written to: $LOG_FILE"
-
-  # Exit 1 if any service couldn't be recovered
-  [[ $failed -eq 0 ]] && exit 0 || exit 1
-```
----
-
-# Key things
-
-- mapfile pattern — this is the clean way to get command output into an array:
-```bash
-      mapfile -t arr < <(command | awk '{print $1}')
+    # 4. Verify
+    sleep 3
+    if systemctl is-active --quiet "$svc"; then
+        echo "$(timestamp) SUCCESS: $svc is back up."
+        rm -f "$countfile"
+    else
+        count=$((count + 1))
+        echo "$count" > "$countfile"
+        echo "$(timestamp) FAILED: $svc still down after restart attempt $
+    fi
+done
 ```
 
-- `-t` strips the trailing newline from each element. Without it you get nginx.service\n instead of nginx.service.
+# Code walkthrough — restart/verify/count block:
 
-- (( count++ )) || true — arithmetic on a variable can return exit code 1 when the result is 0, which would trigger set -e and kill the script. The || true prevents that.
-- sleep 2 after restart — services can briefly appear active before crashing again. A short wait catches that.
-- Log file naming — /tmp/auto_recovery_20260902.log is date-stamped so you don't overwrite yesterday's run.
+- countfile="/var/tmp/${svc}.restart_count" → one file per service, remembers failure count across separate script runs (e.g. cron every 5 min).
+- count=0 then [[ -f "$countfile" ]] && count=$(cat "$countfile") → default file already exists, load the real number instead.
+- -ge "$MAX_RESTARTS" → numeric "greater than or equal"; once the cap is hit, alert and continue (skip to next service) instead of restarting again.
+- systemctl restart "$svc" returning 0 only means systemd accepted the req healthy.
+- sleep 3 before checking → give the service time to actually start before judging it.
+- systemctl is-active --quiet "$svc" → the real health check; exit 0 = act
+- On success → rm -f "$countfile" resets the counter, so an unrelated future failure isn't stacked on old history.
+- On failure → increment count, overwrite the file (> truncates, not appeng to stderr.
+
+# Notes:
+
+- --no-legend --plain — always use both when parsing systemctl list-units
+- Always verify after restart with is-active --quiet — "command succeeded" ≠ "service recovered"
+- Reset the failure counter only on a verified success, not just on restart
+- systemctl is-active → rely only on exit code 0 (active) vs non-zero (not active); use systemctl is-failed if you specifically need to know "is it in the failed state"
+
+# Interview-style Q&A:
+
+## 1. What is "flapping" and why is it more dangerous than a service just being dead
+
+A service crashing/restarting repeatedly in a fast cycle. Worse than a clean outage because: it burns CPU/IO on constant restarts, masks the real problem (looks like "it's recovering" when nothing's fixed), floods alerts (causing alert fatigueed), and repeatedly drops connections for anything depending on it.
+
+## 2. What exit code does systemctl is-active return for active vs failed vs activating?
+
+Only rely on: 0 = active, non-zero = not active. There's no stable dist state — use systemctl is-failed separately if you need to confirm"specifically failed" rather than just "not active."
+
+## 3. Why isn't "the restart command ran with no error" the same as "the serv
+   
+systemctl restart returns 0 once systemd accepts the request — before confirming the app inside actually started successfully. It can crash again immediately after. That's why a separate verify step (sleep + is-active) is required.
+
+## 4. Why cap restart attempts instead of retrying forever?
+   
+A service failing for a structural reason (bad config, missing disk, a tarting again. Retrying forever burns resources and delays the real fix — ahuman. Capping converts "silently broken forever" into "loudly escalated after N tries."
+
+## 5. Is "this service is stateful" something systemctl can detect, or does it need human intervention?
+   
+Human judgment. systemctl only knows unit state (active/failed), not what the app is doing internally (mid-transaction, unflushed queue, in-memory cache). That's why the never-restart list is manually curated, not derived from systemd.
