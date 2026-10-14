@@ -9,12 +9,17 @@ Every running program in Linux is a process. Each process gets:
 
 # Core commands
 
-`ps — Process Snapshot`
+`ps — Process Status`
 
 ```bash
 ps aux                    # all processes, all users, with details
+# - a = show processes for all users (not just yours)
+# - u = show in "user-oriented" format — includes CPU%, memory%, start time, etc. as columns
+# - x = include processes not attached to a terminal (background/daemon processes)
+
 ps aux --sort=-%cpu       # sorted by CPU (highest first)
 ps aux --sort=-%mem       # sorted by memory (highest first)
+ps aux --sort=-%cpu | head -n 6
 ps -ef                    # full format, shows PPID
 ps -p 1234                # info about specific PID
 ps -u harish              # processes owned by a user
@@ -222,7 +227,18 @@ In a script:
 
 # Zombie Processes
 
-A zombie is a process that has finished executing but its parent hasn't called wait() to collect its exit status. It stays in the process table as a ghost.
+A zombie is a process that has finished executing but its parent hasn't called wait() to collect its exit status. It stays in the process table as a ghost.When a process finishes, its parent is supposed to "reap" it — read its exit status so the OS can fully remove it. A zombie is a process that finished, but its parent never reaped it. The OS keeps an empty, dead entry around for it. It uses no CPU or memory — it's just a leftover slot sitting in the process table.
+
+## How do you actually see one?
+
+In ps aux output, there's a STAT column showing each process's state. A zombie shows Z:
+
+```bash
+USER   PID  %CPU %MEM STAT  COMMAND
+root   884   0.0  0.0  Z    [myapp] <defunct>
+```
+
+The <defunct> label is ps's own tag for a zombie — a second visual cue, on top of the Z.
 
 ```bash
 # How to find zombies:
@@ -236,14 +252,17 @@ Zombies themselves use almost no resources, but:
    - It means the parent process has a bug — it's not reaping its children
    - The fix is usually to restart the parent process, not kill the zombie directly
 
+## Zombie vs Orphan
+- Zombie = child process that finished, but its parent hasn't read its exit status yet. It's dead, just not cleaned up.
+- Orphan = child process whose parent died first, while the child is still alive and running. Orphans aren't a problem — they get automatically adopted by init (PID 1), which reaps them normally when they finish.
+
 ## Why you can't kill a zombie directly
 
 ```shell
    kill -9 <zombie_pid>  # does nothing
 ```
 
-A zombie is already dead — it has no running code. It's just a record in the process table waiting for its parent to call `wait()` and collect the exit status. The kernel won't
-remove it until the parent does that.
+A zombie is already dead — it has no running code. It's just a record in the process table waiting for its parent to call `wait()` and collect the exit status. The kernel won't remove it until the parent does that.
 
 ## How to fix a zombie process
 
@@ -254,6 +273,17 @@ ps aux | awk '$8 == "Z"'                     # get zombie PIDs
 ps -o ppid= -p <zombie_pid>                  # get parent PID
 ps -o comm= -p <parent_pid>                  # get parent name
 ```
+
+Best command is:
+
+```shell
+ps aux | awk '$8 ~ /Z/'
+```
+
+Plain English: "for every line, if column 8 contains a Z, print the line." ~ means "matches this pattern" (regex match), as opposed to == which would mean "is exactly equal to."
+
+Why ~ and not ==? Because STAT can show combined states like Z+ (zombie in foreground process group) — == "Z" would miss that, but ~ /Z/ catches Z anywhere in the column.
+
 ## Step 2 — Try sending SIGCHLD to the parent
 
 ```shell
@@ -381,13 +411,66 @@ VSZ (Virtual Size) = total virtual memory the process has mapped, including memo
 
 ### Q: How do you find top memory-consuming processes?
 
+```bash
    ps aux --sort=-%mem | head -10     # Linux
    ps aux -m | head -10               # macOS
+```
+### Q: A process is hung and not responding to SIGTERM. What do you do?
 
-   Q: A process is hung and not responding to SIGTERM. What do you do?
+Wait a few seconds first (maybe it's doing cleanup). If still hung, use kill -9. Before force killing in production, check logs to understand why it hung — this is a bug that will happen again. After force kill, verify the service came back up and check for data corruption.
 
-   Wait a few seconds first (maybe it's doing cleanup). If still hung, use kill -9. Before force killing in production, check logs to understand why it hung — this is a bug that
-   will happen again. After force kill, verify the service came back up and check for data corruption.
+# Script 1 — top_cpu.sh
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 [N]   (N = number of top CPU processes to show, default 5)" >&2
+    exit 1
+}
+
+n="${1:-5}"
+
+if ! [[ "$n" =~ ^[0-9]+$ ]] || [[ "$n" -lt 1 ]]; then
+    echo "ERROR: N must be a positive integer, got '$n'" >&2
+    usage
+fi
+```
+ps aux --sort=-%cpu | head -n "$((n + 1))"
+
+validates $1 is actually a positive integer before using it (someone running ./top_cpu.sh abc or ./top_cpu.sh -5 would otherwise silently break head -n), with a usage() guard clause that exits 1 and explains correct usage.
+
+# Script 2 — zombie_finder.sh
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+mapfile -t zombies < <(ps -eo pid,ppid,stat,comm | awk '$3 ~ /Z/')
+
+if [[ ${#zombies[@]} -eq 0 ]]; then
+    echo "$(timestamp) No zombie processes found."
+    exit 0
+fi
+
+echo "$(timestamp) WARNING: ${#zombies[@]} zombie process(es) found:" >&2
+for z in "${zombies[@]}"; do
+    echo "$z"
+done
+
+echo ""
+echo "Top offending parent PIDs (most zombies first):"
+ps -eo ppid,stat | awk '$2 ~ /Z/ {print $1}' | sort | uniq -c | sort -rn |
+
+exit 1
+```
+
+Timestamps every message, writes the warning to stderr (problem = >&2), and — this is the key production detail — exits 1 when zombies are found, 0 when clean. That's not cosmetic: it means this script can be dropped straight into a cron job or monitoring check, and the exit code alone tells an alerting system "fire an alert" vs "all good," without anyone parsing output text. It also includes the PPID-ranking line from the interview question, so the output immediately points at the worst-offending parent process instead of just listing raw zombies.
 
 # Key Things to Remember
 
